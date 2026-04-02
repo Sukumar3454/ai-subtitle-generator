@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+    <title>AI Subtitle Generator</title>
+
+```
+<style>
+    body {
+        background: black;
+        color: white;
+        text-align: center;
+        font-family: Arial, sans-serif;
+    }
+
+    video {
+        width: 90%;
+        max-width: 1000px;
+        margin-top: 20px;
+        border-radius: 10px;
+    }
+
+    #container {
+        position: relative;
+        display: inline-block;
+    }
+
+    #subtitleBox {
+
+    .fade {
+    opacity: 0;
+    transform: translateY(5px);
+}
+
+    .show {
+    opacity: 1;
+    transform: translateY(0);
+    transition: all 0.2s ease-in-out;
+}
+
+
+    width: 90%;
+    max-width: 1000px;
+    margin: 10px auto;
+    padding: 10px 15px;
+
+    background: rgba(0, 0, 0, 0.85); /* YouTube style */
+    color: white;
+
+    font-size: 26px;
+    font-weight: 500;
+    line-height: 1.5;
+
+    text-align: center;
+    border-radius: 6px;
+
+    min-height: 40px;
+    transition: all 0.2s ease-in-out;
+
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+</style>
+```
+
+</head>
+
+<body>
+
+<h2>🎬 AI Subtitle Generator</h2>
+
+<input type="file" id="videoInput" accept="video/*">
+<select id="language">
+    <option value="en">English</option>
+    <option value="te">Telugu</option>
+    <option value="hi">Hindi</option>
+    <option value="ta">Tamil</option>
+</select>
+<br><br>
+
+<label>Font Size:</label> <select id="fontSize"> <option value="20px">Small</option> <option value="28px" selected>Medium</option> <option value="36px">Large</option> <option value="48px">Extra Large</option> </select>
+
+<label>Color:</label> <select id="fontColor"> <option value="yellow">Yellow</option> <option value="white">White</option> <option value="cyan">Cyan</option> <option value="lime">Lime</option> <option value="red">Red</option> </select>
+
+<label>Width:</label> <select id="boxWidth"> <option value="60%">Narrow</option> <option value="80%" selected>Normal</option> <option value="100%">Full</option> </select>
+
+
+<br><br>
+
+<div id="container">
+    <video id="videoPlayer" controls></video>
+</div>
+
+<div id="subtitleBox">Upload a video to start</div>
+
+<script>
+
+// 🎨 Controls
+const fontSizeControl = document.getElementById("fontSize");
+const fontColorControl = document.getElementById("fontColor");
+const boxWidthControl = document.getElementById("boxWidth");
+
+// Apply changes dynamically
+fontSizeControl.addEventListener("change", () => {
+subtitleBox.style.fontSize = fontSizeControl.value;
+});
+
+fontColorControl.addEventListener("change", () => {
+subtitleBox.style.color = fontColorControl.value;
+});
+
+boxWidthControl.addEventListener("change", () => {
+subtitleBox.style.width = boxWidthControl.value;
+});
+
+
+console.log("✅ JS Loaded");
+
+const video = document.getElementById("videoPlayer");
+const subtitleBox = document.getElementById("subtitleBox");
+const languageSelect = document.getElementById("language");
+const videoInput = document.getElementById("videoInput");
+
+let socket = null;
+let interval = null;
+
+// ✅ Upload handler
+videoInput.addEventListener("change", async function(e) {
+
+    console.log("🔥 FILE INPUT TRIGGERED");
+
+    const file = e.target.files[0];
+
+    if (!file) {
+        console.log("❌ No file selected");
+        return;
+    }
+
+    console.log("✅ File selected:", file.name);
+
+    video.src = URL.createObjectURL(file);
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    subtitleBox.innerText = "⏳ Processing video...";
+
+    await fetch("http://127.0.0.1:8000/upload-video/", {
+        method: "POST",
+        body: formData
+    });
+
+    subtitleBox.innerText = "▶️ Click PLAY to start subtitles";
+});
+
+// ✅ Play event
+video.addEventListener("play", () => {
+
+    console.log("🎬 PLAY TRIGGERED");
+
+    if (socket && socket.readyState === 1) return;
+
+    socket = new WebSocket("ws://127.0.0.1:8000/ws/subtitles");
+
+    socket.onopen = () => {
+        console.log("✅ WebSocket connected");
+
+        interval = setInterval(() => {
+            if (socket.readyState === 1) {
+                socket.send(`time:${video.currentTime}|lang:${languageSelect.value}`);
+            }
+        }, 500);
+    };
+
+    socket.onmessage = (event) => {
+        subtitleBox.innerText = event.data || "";
+    };
+
+    socket.onclose = () => {
+        if (event.data.trim() !== subtitleBox.innerText) {
+
+    subtitleBox.classList.remove("show");
+    subtitleBox.classList.add("fade");
+
+    setTimeout(() => {
+        subtitleBox.innerText = event.data;
+        subtitleBox.classList.remove("fade");
+        subtitleBox.classList.add("show");
+    }, 100);
+    if (!event.data.trim()) {
+    subtitleBox.innerText = "";
+}
+}
+        clearInterval(interval);
+    };
+});
+
+// ✅ Pause event
+video.addEventListener("pause", () => {
+    if (interval) clearInterval(interval);
+    if (socket) socket.close();
+});
+
+</script>
+
+</body>
+</html>
