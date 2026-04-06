@@ -1,20 +1,29 @@
 from fastapi import FastAPI, UploadFile, File, WebSocket
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 import whisper
 import torch
 import shutil
 import os
 
-# ✅ Optimize for low memory (Render friendly)
+# =========================
+# 🔥 MEMORY OPTIMIZATION
+# =========================
 os.environ["OMP_NUM_THREADS"] = "1"
 torch.set_num_threads(1)
 
 app = FastAPI()
 
-# ✅ Load Whisper model (lightweight)
-device = "cpu"
-model = whisper.load_model("tiny", device=device)
+# =========================
+# 🔥 LAZY MODEL LOADING
+# =========================
+model = None
+
+def get_model():
+    global model
+    if model is None:
+        print("⚡ Loading Whisper model (tiny.en)...")
+        model = whisper.load_model("tiny.en")  # ✅ smallest & safest
+    return model
 
 # Store subtitles globally
 transcription_result = None
@@ -34,16 +43,19 @@ def serve_ui():
 async def upload_video(file: UploadFile = File(...)):
     global transcription_result
 
-    file_path = f"uploads/{file.filename}"
     os.makedirs("uploads", exist_ok=True)
+    file_path = f"uploads/{file.filename}"
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
     print("🎬 Processing video...")
 
-    # ✅ Transcribe video
-    transcription_result = model.transcribe(file_path)
+    # ✅ Lazy load model here
+    model_instance = get_model()
+
+    # ✅ Transcribe
+    transcription_result = model_instance.transcribe(file_path)
 
     print("✅ Transcription completed")
 
@@ -65,7 +77,7 @@ async def generate_subtitles(language: str = "en"):
         subtitles.append({
             "start": segment["start"],
             "end": segment["end"],
-            "text": segment["text"]  # ✅ No translation (safe)
+            "text": segment["text"]  # ✅ No translation (safe for now)
         })
 
     return {"subtitles": subtitles}
@@ -81,7 +93,7 @@ async def websocket_subtitles(websocket: WebSocket):
         while True:
             data = await websocket.receive_text()
 
-            # Expected format: time:12.34|lang:te
+            # Format: time:12.3|lang:te
             parts = data.split("|")
             current_time = float(parts[0].split(":")[1])
 
@@ -97,7 +109,7 @@ async def websocket_subtitles(websocket: WebSocket):
 
             await websocket.send_text(subtitle_text)
 
-    except Exception as e:
+    except Exception:
         print("🔌 Client disconnected")
 
 # =========================
