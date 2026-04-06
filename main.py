@@ -127,12 +127,21 @@ async def websocket_subtitles(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
-            current_time = float(data.split(":")[1])
+
+            # ✅ HANDLE BOTH FORMATS
+            if "|" in data:
+                current_time = float(data.split("|")[0].split(":")[1])
+            else:
+                current_time = float(data.split(":")[1])
 
             subtitle = ""
 
-            # ✅ USE TRANSLATED IF AVAILABLE
-            source = translated_segments if translated_segments else transcription_result["segments"]
+            if translated_segments:
+                source = translated_segments
+            elif transcription_result:
+                source = transcription_result["segments"]
+            else:
+                source = []
 
             for seg in source:
                 if seg["start"] <= current_time <= seg["end"]:
@@ -141,8 +150,8 @@ async def websocket_subtitles(websocket: WebSocket):
 
             await websocket.send_text(subtitle)
 
-    except:
-        print("🔌 Client disconnected")
+    except Exception as e:
+        print("🔌 Client disconnected:", e)
 
 # =========================
 # LANGUAGES API

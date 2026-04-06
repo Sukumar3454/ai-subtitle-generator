@@ -169,7 +169,7 @@ video.addEventListener("play", () => {
 
         interval = setInterval(() => {
             if (socket.readyState === 1) {
-                socket.send(`time:${video.currentTime}|lang:${languageSelect.value}`);
+                socket.send(`time:${video.currentTime}');'
             }
         }, 500);
     };
