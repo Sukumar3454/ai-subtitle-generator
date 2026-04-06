@@ -146,8 +146,9 @@ videoInput.addEventListener("change", async function(e) {
 
     subtitleBox.innerText = "⏳ Processing video...";
 
-    await fetch("http://127.0.0.1:8000/upload-video/", {
-        method: "POST",
+    await fetch("https://ai-subtitle-generator-9.onrender.com/generate-subtitles/?language=" + languageSelect.value, {
+    method: "POST"
+});
         body: formData
     });
 
