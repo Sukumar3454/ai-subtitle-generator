@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 
 <html>
+    <select id="language"></select>
 <head>
     <title>AI Subtitle Generator</title>
 
@@ -200,6 +201,19 @@ video.addEventListener("pause", () => {
     if (interval) clearInterval(interval);
     if (socket) socket.close();
 });
+fetch("/languages")
+  .then(res => res.json())
+  .then(data => {
+    const dropdown = document.getElementById("language");
+    dropdown.innerHTML = "";
+
+    for (let code in data) {
+      let option = document.createElement("option");
+      option.value = code;
+      option.textContent = data[code];
+      dropdown.appendChild(option);
+    }
+  });
 
 </script>
 

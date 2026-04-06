@@ -4,6 +4,7 @@ import whisper
 import torch
 import shutil
 import os
+from deep_translator import GoogleTranslator
 
 # =========================
 # 🔥 MEMORY OPTIMIZATION
@@ -14,22 +15,41 @@ torch.set_num_threads(1)
 app = FastAPI()
 
 # =========================
-# 🔥 LAZY MODEL LOADING
+# 🔥 LAZY LOAD MODEL
 # =========================
 model = None
 
 def get_model():
     global model
     if model is None:
-        print("⚡ Loading Whisper model (tiny.en)...")
-        model = whisper.load_model("tiny.en")  # ✅ smallest & safest
+        print("⚡ Loading Whisper tiny model...")
+        model = whisper.load_model("tiny.en")  # lightweight
     return model
 
-# Store subtitles globally
+# Store transcription
 transcription_result = None
 
 # =========================
-# ROOT (Serve UI)
+# 🌐 INDIAN LANGUAGES MAP
+# =========================
+LANGUAGES = {
+    "en": "English",
+    "hi": "Hindi",
+    "te": "Telugu",
+    "ta": "Tamil",
+    "kn": "Kannada",
+    "ml": "Malayalam",
+    "mr": "Marathi",
+    "bn": "Bengali",
+    "gu": "Gujarati",
+    "pa": "Punjabi",
+    "or": "Odia",
+    "as": "Assamese",
+    "ur": "Urdu"
+}
+
+# =========================
+# ROOT (UI)
 # =========================
 @app.get("/", response_class=HTMLResponse)
 def serve_ui():
@@ -51,10 +71,8 @@ async def upload_video(file: UploadFile = File(...)):
 
     print("🎬 Processing video...")
 
-    # ✅ Lazy load model here
     model_instance = get_model()
 
-    # ✅ Transcribe
     transcription_result = model_instance.transcribe(file_path)
 
     print("✅ Transcription completed")
@@ -62,7 +80,7 @@ async def upload_video(file: UploadFile = File(...)):
     return {"message": "Video processed successfully"}
 
 # =========================
-# GENERATE SUBTITLES
+# GENERATE SUBTITLES (WITH TRANSLATION)
 # =========================
 @app.post("/generate-subtitles/")
 async def generate_subtitles(language: str = "en"):
@@ -74,10 +92,19 @@ async def generate_subtitles(language: str = "en"):
     subtitles = []
 
     for segment in transcription_result["segments"]:
+        text = segment["text"]
+
+        # 🌍 TRANSLATION
+        if language != "en":
+            try:
+                text = GoogleTranslator(source='auto', target=language).translate(text)
+            except Exception as e:
+                print("⚠️ Translation error:", e)
+
         subtitles.append({
             "start": segment["start"],
             "end": segment["end"],
-            "text": segment["text"]  # ✅ No translation (safe for now)
+            "text": text
         })
 
     return {"subtitles": subtitles}
@@ -93,9 +120,10 @@ async def websocket_subtitles(websocket: WebSocket):
         while True:
             data = await websocket.receive_text()
 
-            # Format: time:12.3|lang:te
+            # format: time:12.3|lang:te
             parts = data.split("|")
             current_time = float(parts[0].split(":")[1])
+            language = parts[1].split(":")[1]
 
             subtitle_text = ""
 
@@ -103,9 +131,20 @@ async def websocket_subtitles(websocket: WebSocket):
                 for segment in transcription_result["segments"]:
                     if segment["start"] <= current_time <= segment["end"]:
                         subtitle_text = segment["text"]
+
+                        # 🌍 LIVE TRANSLATION
+                        if language != "en":
+                            try:
+                                subtitle_text = GoogleTranslator(
+                                    source='auto',
+                                    target=language
+                                ).translate(subtitle_text)
+                            except:
+                                pass
+
                         break
 
-            print(f"⏱ Time: {current_time} | Subtitle: {subtitle_text}")
+            print(f"⏱ {current_time} → {subtitle_text}")
 
             await websocket.send_text(subtitle_text)
 
@@ -116,7 +155,7 @@ async def websocket_subtitles(websocket: WebSocket):
 # DOWNLOAD SRT
 # =========================
 @app.post("/download-srt/")
-async def download_srt():
+async def download_srt(language: str = "en"):
     global transcription_result
 
     if not transcription_result:
@@ -134,10 +173,24 @@ async def download_srt():
 
     with open(srt_path, "w", encoding="utf-8") as f:
         for i, seg in enumerate(transcription_result["segments"], start=1):
-            start = format_time(seg["start"])
-            end = format_time(seg["end"])
             text = seg["text"]
 
-            f.write(f"{i}\n{start} --> {end}\n{text}\n\n")
+            # 🌍 TRANSLATE FOR DOWNLOAD
+            if language != "en":
+                try:
+                    text = GoogleTranslator(source='auto', target=language).translate(text)
+                except:
+                    pass
+
+            f.write(f"{i}\n")
+            f.write(f"{format_time(seg['start'])} --> {format_time(seg['end'])}\n")
+            f.write(f"{text}\n\n")
 
     return {"message": "SRT generated", "path": srt_path}
+
+# =========================
+# GET LANGUAGES (FOR DROPDOWN)
+# =========================
+@app.get("/languages")
+def get_languages():
+    return LANGUAGES

@@ -4,3 +4,4 @@ python-multipart
 openai-whisper
 ffmpeg-python
 torch==2.9.0
+deep-translator
