@@ -1,17 +1,14 @@
 from fastapi import FastAPI, UploadFile, File, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi import WebSocketDisconnect
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-
-from services.speech_to_text import transcribe_audio
-from services.translator import translate_text
-from utils.file_handler import save_upload_file, save_srt
+from fastapi.responses import HTMLResponse
+import whisper
+import shutil
+import os
+import asyncio
+from googletrans import Translator
+import torch
 
 app = FastAPI()
-
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ✅ Allow frontend access
 app.add_middleware(
@@ -22,108 +19,96 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 🔥 Global variables
-latest_video_path = None
-latest_result = None
+# ✅ LOAD MODEL (CPU + LOW MEMORY)
+device = "cpu"
+model = whisper.load_model("tiny", device=device)
+
+translator = Translator()
+
+UPLOAD_FOLDER = "uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+transcription_result = None
 
 
-# ✅ Root endpoint
-@app.get("/")
-def serve_ui():
-    return FileResponse("static/index.html")
-
-
-# ✅ Upload video + process
+# ✅ Upload Video
 @app.post("/upload-video/")
 async def upload_video(file: UploadFile = File(...)):
-    global latest_video_path, latest_result
+    global transcription_result
 
-    file_path = save_upload_file(file, file.filename)
+    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
 
     print("🎬 Processing video...")
 
-    latest_video_path = file_path
-    latest_result = transcribe_audio(file_path)
+    # Transcribe
+    transcription_result = model.transcribe(file_path)
 
     print("✅ Transcription completed")
 
-    return {"message": "Video uploaded & processed"}
+    return {"message": "Video uploaded and processed"}
 
 
-# ✅ Generate subtitles (Swagger)
-@app.post("/generate-subtitles/")
-async def generate_subtitles(file: UploadFile = File(...), language: str = "en"):
-    file_path = save_upload_file(file, file.filename)
+# ✅ Get Subtitle by Time
+def get_subtitle_by_time(current_time, language="en"):
+    global transcription_result
 
-    result = transcribe_audio(file_path)
-    original_text = result["text"]
+    if not transcription_result:
+        return ""
 
-    translated_text = translate_text(original_text, language)
+    for segment in transcription_result["segments"]:
+        if segment["start"] <= current_time <= segment["end"]:
+            text = segment["text"]
 
-    return {
-        "original_text": original_text,
-        "translated_text": translated_text
-    }
+            # 🌍 Translate if needed
+            if language != "en":
+                try:
+                    text = translator.translate(text, dest=language).text
+                except:
+                    pass
 
+            return text
 
-# ✅ Download SRT
-@app.post("/download-srt/")
-async def download_srt(file: UploadFile = File(...)):
-    file_path = save_upload_file(file, file.filename)
-
-    result = transcribe_audio(file_path)
-
-    # ✅ FIXED: pass filename
-    srt_path = save_srt(result, "subtitles.srt")
-
-    return FileResponse(
-        srt_path,
-        media_type="application/octet-stream",
-        filename="subtitles.srt"
-    )
+    return ""
 
 
-# ✅ 🔥 REAL-TIME SUBTITLES (FINAL WORKING VERSION)
+# ✅ WebSocket for LIVE subtitles
 @app.websocket("/ws/subtitles")
-async def websocket_subtitles(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-
-    global latest_result
+    print("🔌 WebSocket connected")
 
     try:
         while True:
             data = await websocket.receive_text()
 
-            # Example: "time:12.5|lang:te"
-            parts = data.split("|")
+            # Expected format: time:12.3|lang:te
+            try:
+                parts = data.split("|")
+                time_part = parts[0].split(":")[1]
+                lang_part = parts[1].split(":")[1]
 
-            current_time = 0
-            lang = "en"
+                current_time = float(time_part)
+                language = lang_part
+            except:
+                await websocket.send_text("")
+                continue
 
-            for p in parts:
-                if "time:" in p:
-                    current_time = float(p.split(":")[1])
-                if "lang:" in p:
-                    lang = p.split(":")[1]
+            subtitle = get_subtitle_by_time(current_time, language)
 
-            subtitle = ""
+            print(f"⏱ Time: {current_time:.2f} | Subtitle: {subtitle}")
 
-            if latest_result:
-                for seg in latest_result["segments"]:
-                    # ✅ FIX: time tolerance
-                    if seg["start"] - 0.5 <= current_time <= seg["end"] + 0.5:
-                        subtitle = seg["text"]
-                        break
+            await websocket.send_text(subtitle)
 
-            # 🔍 Debug (important)
-            print(f"⏱ Time: {current_time} | Subtitle: {subtitle}")
+            await asyncio.sleep(0.3)
 
-            translated = translate_text(subtitle, lang) if subtitle else ""
-
-            await websocket.send_text(translated)
-
-    except WebSocketDisconnect:
+    except:
         print("🔌 Client disconnected")
 
-    except Exception as e:
-        print("❌ WebSocket error:", e)
+
+# ✅ Root API (optional)
+@app.get("/")
+def home():
+    return {"message": "AI Subtitle Generator API running 🚀"}
