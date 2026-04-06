@@ -6,9 +6,11 @@ import shutil
 import os
 import asyncio
 from googletrans import Translator
+import whisper
 import torch
 
-app = FastAPI()
+app = FastAPI() 
+torch.set_num_threads(1)
 
 # ✅ Allow frontend access
 app.add_middleware(
@@ -21,7 +23,9 @@ app.add_middleware(
 
 # ✅ LOAD MODEL (CPU + LOW MEMORY)
 device = "cpu"
-model = whisper.load_model("tiny", device=device)
+
+model = whisper.load_model("tiny")
+model = model.to(device)
 
 translator = Translator()
 

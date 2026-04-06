@@ -4,4 +4,4 @@ python-multipart
 openai-whisper
 ffmpeg-python
 googletrans==4.0.0-rc1
-torch==2.0.1
+torch==2.9.0
