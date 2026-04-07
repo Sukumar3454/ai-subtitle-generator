@@ -16,17 +16,20 @@ app = FastAPI()
 
 model = None
 transcription_result = None
-translated_segments = None  # ✅ STORE TRANSLATED DATA
+translated_segments = None
 
+# =========================
+# LOAD MODEL (LIGHTWEIGHT)
+# =========================
 def get_model():
     global model
     if model is None:
         print("⚡ Loading Whisper tiny model...")
-        model = whisper.load_model("tiny.en")
+        model = whisper.load_model("tiny.en", device="cpu")
     return model
 
 # =========================
-# 🇮🇳 ALL INDIAN LANGUAGES
+# 🇮🇳 INDIAN LANGUAGES
 # =========================
 LANGUAGES = {
     "en": "English",
@@ -42,14 +45,7 @@ LANGUAGES = {
     "or": "Odia",
     "as": "Assamese",
     "ur": "Urdu",
-    "sd": "Sindhi",
-    "sa": "Sanskrit",
-    "ne": "Nepali",
-    "kok": "Konkani",
-    "mai": "Maithili",
-    "bho": "Bhojpuri",
-    "doi": "Dogri",
-    "mni": "Manipuri"
+    "ne": "Nepali"
 }
 
 # =========================
@@ -67,7 +63,7 @@ def serve_ui():
 async def upload_video(file: UploadFile = File(...)):
     global transcription_result, translated_segments
 
-    translated_segments = None  # reset
+    translated_segments = None
 
     os.makedirs("uploads", exist_ok=True)
     file_path = f"uploads/{file.filename}"
@@ -85,7 +81,7 @@ async def upload_video(file: UploadFile = File(...)):
     return {"message": "done"}
 
 # =========================
-# GENERATE TRANSLATION ONCE
+# TRANSLATE
 # =========================
 @app.post("/generate-subtitles/")
 async def generate_subtitles(language: str = "en"):
@@ -118,7 +114,7 @@ async def generate_subtitles(language: str = "en"):
     return {"message": "translated"}
 
 # =========================
-# WEBSOCKET (USE TRANSLATED DATA)
+# WEBSOCKET
 # =========================
 @app.websocket("/ws/subtitles")
 async def websocket_subtitles(websocket: WebSocket):
@@ -128,20 +124,10 @@ async def websocket_subtitles(websocket: WebSocket):
         while True:
             data = await websocket.receive_text()
 
-            # ✅ HANDLE BOTH FORMATS
-            if "|" in data:
-                current_time = float(data.split("|")[0].split(":")[1])
-            else:
-                current_time = float(data.split(":")[1])
-
+            current_time = float(data.split(":")[1])
             subtitle = ""
 
-            if translated_segments:
-                source = translated_segments
-            elif transcription_result:
-                source = transcription_result["segments"]
-            else:
-                source = []
+            source = translated_segments if translated_segments else transcription_result["segments"]
 
             for seg in source:
                 if seg["start"] <= current_time <= seg["end"]:
@@ -150,8 +136,8 @@ async def websocket_subtitles(websocket: WebSocket):
 
             await websocket.send_text(subtitle)
 
-    except Exception as e:
-        print("🔌 Client disconnected:", e)
+    except:
+        print("🔌 Client disconnected")
 
 # =========================
 # LANGUAGES API

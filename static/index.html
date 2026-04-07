@@ -1,69 +1,58 @@
 <!DOCTYPE html>
-
 <html>
-    <select id="language"></select>
 <head>
     <title>AI Subtitle Generator</title>
 
-```
-<style>
-    body {
-        background: black;
-        color: white;
-        text-align: center;
-        font-family: Arial, sans-serif;
-    }
+    <style>
+        body {
+            background: black;
+            color: white;
+            text-align: center;
+            font-family: Arial;
+        }
 
-    video {
-        width: 90%;
-        max-width: 1000px;
-        margin-top: 20px;
-        border-radius: 10px;
-    }
+        video {
+            width: 90%;
+            max-width: 1000px;
+            margin-top: 20px;
+            border-radius: 10px;
+        }
 
-    #container {
-        position: relative;
-        display: inline-block;
-    }
+        #subtitleBox {
+            width: 80%;
+            max-width: 1000px;
+            margin: 15px auto;
+            padding: 12px 18px;
 
-    #subtitleBox {
+            background: rgba(0, 0, 0, 0.85);
+            color: yellow;
 
-    .fade {
-    opacity: 0;
-    transform: translateY(5px);
-}
+            font-size: 28px;
+            font-weight: 500;
+            line-height: 1.5;
 
-    .show {
-    opacity: 1;
-    transform: translateY(0);
-    transition: all 0.2s ease-in-out;
-}
+            text-align: center;
+            border-radius: 6px;
 
+            min-height: 40px;
 
-    width: 90%;
-    max-width: 1000px;
-    margin: 10px auto;
-    padding: 10px 15px;
+            word-wrap: break-word;
+            white-space: pre-wrap;
 
-    background: rgba(0, 0, 0, 0.85); /* YouTube style */
-    color: white;
+            opacity: 1;
+            transition: all 0.2s ease-in-out;
+        }
 
-    font-size: 26px;
-    font-weight: 500;
-    line-height: 1.5;
+        .fade {
+            opacity: 0;
+            transform: translateY(5px);
+        }
 
-    text-align: center;
-    border-radius: 6px;
-
-    min-height: 40px;
-    transition: all 0.2s ease-in-out;
-
-    word-wrap: break-word;
-    white-space: pre-wrap;
-}
-</style>
-```
-
+        .show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
 </head>
 
 <body>
@@ -71,150 +60,166 @@
 <h2>🎬 AI Subtitle Generator</h2>
 
 <input type="file" id="videoInput" accept="video/*">
-<select id="language">
-    <option value="en">English</option>
-    <option value="te">Telugu</option>
-    <option value="hi">Hindi</option>
-    <option value="ta">Tamil</option>
+<select id="language"></select>
+
+<br><br>
+
+<label>Font Size:</label>
+<select id="fontSize">
+    <option value="20px">Small</option>
+    <option value="28px" selected>Medium</option>
+    <option value="36px">Large</option>
+    <option value="48px">Extra Large</option>
 </select>
+
+<label>Color:</label>
+<select id="fontColor">
+    <option value="yellow">Yellow</option>
+    <option value="white">White</option>
+    <option value="cyan">Cyan</option>
+    <option value="lime">Lime</option>
+    <option value="red">Red</option>
+</select>
+
+<label>Width:</label>
+<select id="boxWidth">
+    <option value="60%">Narrow</option>
+    <option value="80%" selected>Normal</option>
+    <option value="100%">Full</option>
+</select>
+
 <br><br>
 
-<label>Font Size:</label> <select id="fontSize"> <option value="20px">Small</option> <option value="28px" selected>Medium</option> <option value="36px">Large</option> <option value="48px">Extra Large</option> </select>
-
-<label>Color:</label> <select id="fontColor"> <option value="yellow">Yellow</option> <option value="white">White</option> <option value="cyan">Cyan</option> <option value="lime">Lime</option> <option value="red">Red</option> </select>
-
-<label>Width:</label> <select id="boxWidth"> <option value="60%">Narrow</option> <option value="80%" selected>Normal</option> <option value="100%">Full</option> </select>
-
-
-<br><br>
-
-<div id="container">
-    <video id="videoPlayer" controls></video>
-</div>
-
-<div id="subtitleBox">Upload a video to start</div>
+<video id="videoPlayer" controls></video>
+<div id="subtitleBox" class="show">Upload a video</div>
 
 <script>
-
-// 🎨 Controls
-const fontSizeControl = document.getElementById("fontSize");
-const fontColorControl = document.getElementById("fontColor");
-const boxWidthControl = document.getElementById("boxWidth");
-
-// Apply changes dynamically
-fontSizeControl.addEventListener("change", () => {
-subtitleBox.style.fontSize = fontSizeControl.value;
-});
-
-fontColorControl.addEventListener("change", () => {
-subtitleBox.style.color = fontColorControl.value;
-});
-
-boxWidthControl.addEventListener("change", () => {
-subtitleBox.style.width = boxWidthControl.value;
-});
-
-
-console.log("✅ JS Loaded");
 
 const video = document.getElementById("videoPlayer");
 const subtitleBox = document.getElementById("subtitleBox");
 const languageSelect = document.getElementById("language");
 const videoInput = document.getElementById("videoInput");
 
+const fontSizeControl = document.getElementById("fontSize");
+const fontColorControl = document.getElementById("fontColor");
+const boxWidthControl = document.getElementById("boxWidth");
+
 let socket = null;
 let interval = null;
 
-// ✅ Upload handler
-videoInput.addEventListener("change", async function(e) {
+// 🎨 Controls
+fontSizeControl.onchange = () => {
+    subtitleBox.style.fontSize = fontSizeControl.value;
+};
 
-    console.log("🔥 FILE INPUT TRIGGERED");
+fontColorControl.onchange = () => {
+    subtitleBox.style.color = fontColorControl.value;
+};
 
-    const file = e.target.files[0];
+boxWidthControl.onchange = () => {
+    subtitleBox.style.width = boxWidthControl.value;
+};
 
-    if (!file) {
-        console.log("❌ No file selected");
-        return;
+// 🌍 Load languages
+fetch("/languages")
+.then(res => res.json())
+.then(data => {
+    for (let code in data) {
+        let opt = document.createElement("option");
+        opt.value = code;
+        opt.textContent = data[code];
+        languageSelect.appendChild(opt);
     }
 
-    console.log("✅ File selected:", file.name);
+    languageSelect.value = "en"; // default
+});
+
+// 📤 Upload + translate
+videoInput.onchange = async function(e) {
+
+    const file = e.target.files[0];
+    if (!file) return;
 
     video.src = URL.createObjectURL(file);
 
     const formData = new FormData();
     formData.append("file", file);
 
-    subtitleBox.innerText = "⏳ Processing video...";
+    subtitleBox.innerText = "⏳ Uploading...";
 
-    await fetch("https://ai-subtitle-generator-9.onrender.com/generate-subtitles/?language=" + languageSelect.value, {
-    method: "POST"
-});
+    await fetch("/upload-video/", {
+        method: "POST",
         body: formData
     });
 
-    subtitleBox.innerText = "▶️ Click PLAY to start subtitles";
+    subtitleBox.innerText = "🌍 Translating...";
 
+    await fetch("/generate-subtitles/?language=" + languageSelect.value, {
+        method: "POST"
+    });
 
-// ✅ Play event
+    subtitleBox.innerText = "▶️ Click PLAY";
+};
+
+// ▶️ Play
 video.addEventListener("play", () => {
-
-    console.log("🎬 PLAY TRIGGERED");
 
     if (socket && socket.readyState === 1) return;
 
-    socket = new WebSocket("ws://127.0.0.1:8000/ws/subtitles");
+    const protocol = location.protocol === "https:" ? "wss" : "ws";
+    socket = new WebSocket(`${protocol}://${location.host}/ws/subtitles`);
 
     socket.onopen = () => {
-        console.log("✅ WebSocket connected");
 
         interval = setInterval(() => {
-            if (socket.readyState === 1) {
-                socket.send(`time:${video.currentTime}');'
-            }
-        }, 500);
+
+            if (!socket || socket.readyState !== 1) return;
+
+            socket.send(`time:${video.currentTime}`);
+
+        }, 400);
     };
 
     socket.onmessage = (event) => {
-        subtitleBox.innerText = event.data || "";
+
+        const newText = event.data || "";
+
+        if (!newText.trim()) {
+            subtitleBox.innerText = "";
+            return;
+        }
+
+        if (newText !== subtitleBox.innerText) {
+
+            subtitleBox.classList.remove("show");
+            subtitleBox.classList.add("fade");
+
+            setTimeout(() => {
+                subtitleBox.innerText = newText;
+                subtitleBox.classList.remove("fade");
+                subtitleBox.classList.add("show");
+            }, 80);
+        }
     };
 
     socket.onclose = () => {
-        if (event.data.trim() !== subtitleBox.innerText) {
-
-    subtitleBox.classList.remove("show");
-    subtitleBox.classList.add("fade");
-
-    setTimeout(() => {
-        subtitleBox.innerText = event.data;
-        subtitleBox.classList.remove("fade");
-        subtitleBox.classList.add("show");
-    }, 100);
-    if (!event.data.trim()) {
-    subtitleBox.innerText = "";
-}
-}
         clearInterval(interval);
     };
 });
 
-// ✅ Pause event
+// ⏸ Pause
 video.addEventListener("pause", () => {
-    if (interval) clearInterval(interval);
-    if (socket) socket.close();
-});
-fetch("/languages")
-  .then(res => res.json())
-  .then(data => {
-    const dropdown = document.getElementById("language");
-    dropdown.innerHTML = "";
 
-    for (let code in data) {
-      let option = document.createElement("option");
-      option.value = code;
-      option.textContent = data[code];
-      dropdown.appendChild(option);
+    if (interval) {
+        clearInterval(interval);
+        interval = null;
     }
-  });
+
+    if (socket) {
+        socket.close();
+        socket = null;
+    }
+});
 
 </script>
 

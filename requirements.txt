@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 python-multipart
-openai-whisper
 ffmpeg-python
-torch==2.9.0
+openai-whisper
 deep-translator
+torch
